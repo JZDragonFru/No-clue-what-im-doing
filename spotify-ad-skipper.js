@@ -1,93 +1,95 @@
 // ==UserScript==
-// @name         Spotify ad skipper
+// @name         Spotify ad muter
 // @version      1.0
 // @namespace    http://tampermonkey.net/
-// @description  A small script which will help to skip audio ads on spotify
+// @description  A small script which will mute spotify if ads getting played
 // @match        https://*.spotify.com/*
 // @grant        none
-// @run-at document-end
+// @run-at       document-start
 // ==/UserScript==
 
 !async function () {
 
-    function getLocationQueries() {
-        if (document.location) {
-            const raw = document.location.search.substring(1);
-            const rawParts = raw.split(/&/g);
-            const queries = {};
-
-            for (let p of rawParts) {
-                const name = decodeURIComponent(p.substring(0, p.indexOf('=')));
-                queries[name] = decodeURIComponent(p.substring(name.length + 1, p.length));
-            }
-
-            return queries;
-        }
-    }
-
-    function createLocationQuery(obj) {
-        const keys = Object.keys(obj);
-        let query = '?';
-
-        for (let i = 0; i < keys.length; i++) {
-            const name = encodeURIComponent(keys[i]);
-            const value = encodeURIComponent(obj[name]);
-            query += `${name}=${value}&`;
-        }
-
-        return query.substring(0, query.length - 1);
-    }
-
     async function queryAsync(query) {
         return new Promise(resolve => {
-            !function check() {
+            const interval = setInterval(() => {
                 const element = document.querySelector(query);
                 if (element) {
+                    clearInterval(interval);
                     return resolve(element);
                 }
-                setTimeout(check, 250);
-            }();
+            }, 250);
         });
     }
 
-    async function sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
-    const queries = getLocationQueries();
-    if (Boolean(queries.autoplay)) {
-        queryAsync('button.spoticon-play-16').then(async b => {
-            while (b.title === 'Play') {
-                b.click();
-                await sleep(2000);
+    /**
+     * Inject a middleware function in a object or instance
+     * @param ctx Object or instance
+     * @param fn Function name
+     * @param middleware Middleware function
+     * @param transform Transform function result
+     */
+    function inject({ctx, fn, middleware, transform}) {
+        const original = ctx[fn];
+        ctx[fn] = function () {
+            if (!middleware || middleware.call(this, ...arguments) !== false) {
+                const result = original.call(this, ...arguments);
+                return transform ? transform.call(this, result, ...arguments) : result;
             }
-        });
+        };
     }
 
-    // Wait a little bit
-    setTimeout(() => {
-        queryAsync('.now-playing-bar').then(element => {
-            new MutationObserver(() => {
-                const link = document.querySelector('.now-playing > a');
-                console.log('Check for ad.', new Date().toString());
+    const nowPlayingBar = await queryAsync('.now-playing-bar');
+    const playButton = await queryAsync('button[title=Play], button[title=Pause]');
 
-                if (link) {
-                    console.log('Ad found, reload and autoplay.');
-                    queries.autoplay = true;
+    let audio;
 
-                    // Reload page
-                    const base = document.location.origin + document.location.pathname;
-                    const queryString = createLocationQuery(queries);
+    inject({
+        ctx: document,
+        fn: 'createElement',
+        transform(result, type) {
 
-                    console.log('Open', base + queryString);
-                    window.open(base + queryString, '_self');
-                }
-            }).observe(element, {
-                characterData: true,
-                childList: true,
-                attributes: true,
-                subtree: true
-            });
-        });
-    }, 1000);
+            if (type === 'audio') {
+                audio = result;
+            }
+
+            return result;
+        }
+    });
+
+    let playInterval;
+    new MutationObserver(() => {
+        const link = document.querySelector('.now-playing > a');
+
+        if (link) {
+
+            if (!audio) {
+                return console.error('Audio-element not found!');
+            }
+
+            if (!playButton) {
+                return console.error('Play-button not found!');
+            }
+
+            // console.log('Ad found', audio, playButton, nowPlayingBar);
+
+            audio.src = '';
+            playButton.click();
+            if (!playInterval) {
+                playInterval = setInterval(() => {
+                    if (!document.querySelector('.now-playing > a') && playButton.title === 'Pause') {
+                        clearInterval(playInterval);
+                        playInterval = null;
+                    } else {
+                        playButton.click();
+                    }
+                }, 500);
+            }
+        }
+    }).observe(nowPlayingBar, {
+        characterData: true,
+        childList: true,
+        attributes: true,
+        subtree: true
+    });
 }();
