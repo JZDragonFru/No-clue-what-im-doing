@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Spotify ad muter
+// @name         Spotify ad skipper
 // @version      1.0
 // @namespace    http://tampermonkey.net/
-// @description  A small script which will mute spotify if ads getting played
+// @description  Detects and skips ads on spotify
 // @match        https://*.spotify.com/*
 // @grant        none
 // @run-at       document-start
