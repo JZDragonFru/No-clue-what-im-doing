@@ -94,4 +94,15 @@
         attributes: true,
         subtree: true
     });
+
+    // Hide upgrade-button and captcha-errors, we don't what to see that.
+    const style = document.createElement('style');
+    style.innerHTML = `
+        [aria-label="Upgrade to Premium"],
+        body > div:not(#main) {
+            display: none !important;
+        }
+    `;
+
+    document.body.appendChild(style);
 }();
